@@ -1,4 +1,4 @@
-const CACHE = 'gamecorner-v2';
+const CACHE = 'gamecorner-v3';
 const ASSETS = [
   './',
   './index.html',
