@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"/>
+  <title>Minesweeper</title>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Minesweeper"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <meta name="theme-color" content="#1e1e2e"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#1e1e2e; --surface:#2a2a3e; --border:#44475a;
+      --text:#cdd6f4; --sub:#6c7086; --accent:#89b4fa;
+      --green:#a6e3a1; --red:#f38ba8; --yellow:#f9e2af; --purple:#cba6f7;
+    }
+    html, body {
+      height:100%; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      overflow:hidden; touch-action:none;
+      -webkit-tap-highlight-color:transparent;
+      padding-top:env(safe-area-inset-top);
+      padding-bottom:env(safe-area-inset-bottom);
+    }
+    #app {
+      display:flex; flex-direction:column; align-items:center;
+      height:100%; padding:6px 8px 4px; gap:6px;
+    }
+    h1 { font-size:17px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--accent); }
+    .back-btn {
+      position:absolute; left:8px; top:8px; font-size:24px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; width:44px; height:44px;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; text-decoration:none;
+    }
+    .back-btn:hover { border-color:var(--accent); }
+    .diff-row { display:flex; gap:6px; }
+    .diff-row button {
+      background:var(--surface); border:1px solid var(--border); color:var(--text);
+      border-radius:20px; padding:5px 14px; font-size:12px; font-weight:600; cursor:pointer;
+    }
+    .diff-row button.active { background:var(--accent); border-color:var(--accent); color:#1e1e2e; }
+    .toolbar {
+      display:flex; align-items:center; gap:12px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; padding:6px 16px; width:100%; max-width:380px;
+      justify-content:space-between;
+    }
+    .stat { text-align:center; }
+    .stat-label { font-size:10px; color:var(--sub); letter-spacing:1px; text-transform:uppercase; }
+    .stat-value { font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--accent); min-width:48px; }
+    #reset-btn { font-size:28px; background:none; border:none; cursor:pointer; line-height:1; padding:4px; }
+    /* ── Credits bar ── */
+    .credits-bar {
+      display:flex; align-items:center; gap:8px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; padding:6px 16px; width:100%; max-width:380px;
+      justify-content:space-between;
+    }
+    .credits-label { font-size:11px; color:var(--sub); text-transform:uppercase; letter-spacing:1px; }
+    .credits-pips { display:flex; gap:5px; }
+    .pip {
+      width:18px; height:18px; border-radius:50%;
+      background:var(--purple); border:2px solid var(--purple);
+      transition:background 0.2s;
+    }
+    .pip.empty { background:transparent; border-color:var(--border); }
+    .credits-count { font-size:14px; font-weight:700; color:var(--purple); min-width:60px; text-align:right; }
+
+    /* ── Lifeline buttons ── */
+    .lifeline-row { display:flex; gap:8px; }
+    .lifeline-btn {
+      display:flex; align-items:center; gap:5px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:5px 12px;
+      font-size:12px; font-weight:600; color:var(--text); cursor:pointer;
+      transition:background 0.15s, border-color 0.15s;
+    }
+    .lifeline-btn:disabled { opacity:0.35; cursor:not-allowed; }
+    .lifeline-btn.skip  { border-color:#fab387; }
+    .lifeline-btn.skip:not(:disabled):hover  { background:#fab387; color:#1e1e2e; }
+    .lifeline-btn.safe  { border-color:var(--green); }
+    .lifeline-btn.safe:not(:disabled):hover  { background:var(--green); color:#1e1e2e; }
+    .lifeline-btn .cost { font-size:10px; opacity:0.7; }
+
+    /* ── Board scroll ── */
+    #scroll {
+      flex:1; width:100%; overflow:auto; -webkit-overflow-scrolling:touch;
+      display:flex; align-items:flex-start; justify-content:center;
+    }
+    #board {
+      display:inline-grid; gap:1px; background:var(--border);
+      border:2px solid var(--border); border-radius:8px; overflow:hidden;
+      -webkit-touch-callout:none; user-select:none;
+    }
+    .cell {
+      width:34px; height:34px; display:flex; align-items:center;
+      justify-content:center; font-size:14px; font-weight:700;
+      background:#313244; position:relative; cursor:pointer;
+    }
+    .cell.hidden   { background:#313244; }
+    .cell.revealed { background:var(--surface); cursor:default; }
+    .cell.flagged::after  { content:"🚩"; font-size:16px; }
+    .cell.question::after { content:"?"; font-size:16px; color:var(--yellow); font-weight:900; }
+    .cell.mine-hit      { background:var(--red) !important; }
+    .cell.mine-revealed { background:var(--surface); }
+    .cell.wrong-flag::after { content:"❌"; font-size:14px; }
+    .cell.safe-hint { animation:pulse-safe 0.8s ease-out; }
+    @keyframes pulse-safe {
+      0%   { box-shadow:0 0 0 0 rgba(166,227,161,0.7); }
+      70%  { box-shadow:0 0 0 8px rgba(166,227,161,0); }
+      100% { box-shadow:0 0 0 0 rgba(166,227,161,0); }
+    }
+    .cell.skip-flash { animation:pulse-skip 0.6s ease-out; }
+    @keyframes pulse-skip {
+      0%   { background:#fab387; }
+      100% { background:var(--surface); }
+    }
+    .n1{color:#89b4fa;} .n2{color:#a6e3a1;} .n3{color:#f38ba8;}
+    .n4{color:#cba6f7;} .n5{color:#fab387;} .n6{color:#94e2d5;}
+    .n7{color:#f9e2af;} .n8{color:#cdd6f4;}
+
+    /* ── Lifeline modal ── */
+    #modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,0.75); z-index:100;
+      align-items:center; justify-content:center;
+    }
+    #modal-overlay.show { display:flex; }
+    #modal {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:24px 20px; max-width:320px; width:90%;
+      text-align:center; display:flex; flex-direction:column; gap:14px;
+    }
+    #modal h2 { font-size:22px; }
+    #modal p  { font-size:14px; color:var(--sub); line-height:1.5; }
+    .modal-btns { display:flex; flex-direction:column; gap:8px; }
+    .modal-btns button {
+      border:none; border-radius:12px; padding:12px;
+      font-size:15px; font-weight:700; cursor:pointer; transition:opacity 0.15s;
+    }
+    .modal-btns button:disabled { opacity:0.35; cursor:not-allowed; }
+    #btn-use-skip  { background:#fab387; color:#1e1e2e; }
+    #btn-use-safe  { background:var(--green); color:#1e1e2e; }
+    #btn-lose      { background:var(--red); color:#1e1e2e; }
+
+    /* ── Bottom ── */
+    #message { font-size:15px; font-weight:700; min-height:20px; text-align:center; }
+    #message.win  { color:var(--green); }
+    #message.lose { color:var(--red); }
+    #best { font-size:11px; color:var(--sub); min-height:16px; }
+    #flag-toggle {
+      display:flex; align-items:center; gap:8px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:5px 14px; cursor:pointer;
+      font-size:13px; font-weight:600; color:var(--text); user-select:none;
+    }
+    #flag-toggle.active { background:var(--red); border-color:var(--red); color:#1e1e2e; }
+  </style>
+</head>
+<body>
+<div id="app" style="position:relative;">
+  <a href="index.html" class="back-btn" title="Back to GameCorner">🏠</a>
+  <h1>💣 Minesweeper</h1>
+
+  <div class="diff-row">
+    <button data-level="beginner">Easy</button>
+    <button data-level="intermediate">Medium</button>
+    <button data-level="expert" class="active">Expert</button>
+  </div>
+
+  <div class="toolbar">
+    <div class="stat">
+      <div class="stat-label">Mines</div>
+      <div class="stat-value" id="mine-count">099</div>
+    </div>
+    <button id="reset-btn" title="New game">🙂</button>
+    <div class="stat">
+      <div class="stat-label">Time</div>
+      <div class="stat-value" id="timer">000</div>
+    </div>
+  </div>
+
+  <!-- Credits display -->
+  <div class="credits-bar">
+    <div>
+      <div class="credits-label">⚡ Credits</div>
+      <div class="credits-pips" id="pips"></div>
+    </div>
+    <div class="credits-count" id="credits-count"></div>
+  </div>
+
+  <!-- Lifeline buttons (active during play) -->
+  <div class="lifeline-row">
+    <button class="lifeline-btn skip" id="btn-skip-active" title="Skip Mine — costs 2 credits">
+      💨 Skip Mine <span class="cost">(2cr)</span>
+    </button>
+    <button class="lifeline-btn safe" id="btn-safe-active" title="Reveal Safe Cell — costs 1 credit">
+      🔍 Reveal Safe <span class="cost">(1cr)</span>
+    </button>
+  </div>
+
+  <div id="flag-toggle"><span>🚩</span> Flag mode: OFF</div>
+
+  <div id="scroll"><div id="board"></div></div>
+
+  <div id="message"></div>
+  <div id="best"></div>
+</div>
+
+<!-- Lifeline modal (shown on hitting a mine) -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h2>💥 Mine Hit!</h2>
+    <p id="modal-msg">You have credits remaining. Use a lifeline to survive?</p>
+    <div class="modal-btns">
+      <button id="btn-use-skip">💨 Skip Mine <small>(costs 2 credits)</small></button>
+      <button id="btn-use-safe">🔍 Reveal Safe Cell <small>(costs 1 credit)</small></button>
+      <button id="btn-lose">😵 Accept Loss</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const LEVELS = {
+  beginner:     { rows:9,  cols:9,  mines:10 },
+  intermediate: { rows:16, cols:16, mines:40 },
+  expert:       { rows:16, cols:30, mines:99 },
+};
+const MAX_CREDITS = 5;
+const COST_SKIP   = 2;
+const COST_SAFE   = 1;
+
+let level = 'expert';
+let cfg   = LEVELS[level];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let grid, mineSet, gameState, timerVal, timerHandle;
+let flagCount, revealedCount, firstClick, flagMode;
+let credits = 0;
+let pendingMineR = -1, pendingMineC = -1; // mine that was hit, waiting for lifeline decision
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const boardEl       = document.getElementById('board');
+const mineCountEl   = document.getElementById('mine-count');
+const timerEl       = document.getElementById('timer');
+const resetBtn      = document.getElementById('reset-btn');
+const messageEl     = document.getElementById('message');
+const bestEl        = document.getElementById('best');
+const flagToggle    = document.getElementById('flag-toggle');
+const pipsEl        = document.getElementById('pips');
+const creditsCountEl= document.getElementById('credits-count');
+const modalOverlay  = document.getElementById('modal-overlay');
+const modalMsg      = document.getElementById('modal-msg');
+const btnUseSkip    = document.getElementById('btn-use-skip');
+const btnUseSafe    = document.getElementById('btn-use-safe');
+const btnLose       = document.getElementById('btn-lose');
+const btnSkipActive = document.getElementById('btn-skip-active');
+const btnSafeActive = document.getElementById('btn-safe-active');
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const pad3 = n => String(Math.min(Math.max(n,0),999)).padStart(3,'0');
+
+function neighbours(r, c) {
+  const out = [];
+  for (let dr=-1; dr<=1; dr++)
+    for (let dc=-1; dc<=1; dc++) {
+      if (!dr && !dc) continue;
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0 && nr<cfg.rows && nc>=0 && nc<cfg.cols) out.push([nr,nc]);
+    }
+  return out;
+}
+
+// ── Credits ───────────────────────────────────────────────────────────────────
+function loadCredits() {
+  const stored = parseInt(localStorage.getItem('ms_credits'));
+  credits = isNaN(stored) ? MAX_CREDITS : Math.min(stored, MAX_CREDITS);
+}
+function saveCredits() { localStorage.setItem('ms_credits', credits); }
+
+function spendCredits(amount) {
+  credits = Math.max(0, credits - amount);
+  saveCredits(); renderCredits();
+}
+
+function renderCredits() {
+  pipsEl.innerHTML = '';
+  for (let i=0; i<MAX_CREDITS; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'pip' + (i < credits ? '' : ' empty');
+    pipsEl.appendChild(pip);
+  }
+  creditsCountEl.textContent = `${credits} / ${MAX_CREDITS}`;
+  // Update active lifeline buttons
+  btnSkipActive.disabled = credits < COST_SKIP || gameState !== 'playing';
+  btnSafeActive.disabled = credits < COST_SAFE || gameState !== 'playing';
+}
+
+// ── Grid ──────────────────────────────────────────────────────────────────────
+function buildGrid() {
+  grid = Array.from({length:cfg.rows}, () =>
+    Array.from({length:cfg.cols}, () =>
+      ({mine:false, revealed:false, flagged:false, question:false, adjMines:0, el:null})
+    )
+  );
+}
+
+function placeMines(safeR, safeC) {
+  mineSet = new Set();
+  const safe = new Set(
+    [[safeR,safeC],...neighbours(safeR,safeC)].map(([r,c])=>r*cfg.cols+c)
+  );
+  const total = cfg.rows * cfg.cols;
+  while (mineSet.size < cfg.mines) {
+    const idx = Math.floor(Math.random()*total);
+    if (!safe.has(idx)) mineSet.add(idx);
+  }
+  for (const idx of mineSet) {
+    grid[Math.floor(idx/cfg.cols)][idx%cfg.cols].mine = true;
+  }
+  recomputeAdjacency();
+}
+
+function recomputeAdjacency() {
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++)
+      grid[r][c].adjMines = grid[r][c].mine ? 0
+        : neighbours(r,c).filter(([nr,nc])=>grid[nr][nc].mine).length;
+}
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderBoard() {
+  const vw = Math.min(window.innerWidth, 430);
+  const cellSize = Math.max(26, Math.floor((vw - 16) / cfg.cols));
+  boardEl.style.gridTemplateColumns = `repeat(${cfg.cols}, ${cellSize}px)`;
+  boardEl.innerHTML = '';
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++) {
+      const el = document.createElement('div');
+      el.className = 'cell hidden';
+      el.style.width = el.style.height = cellSize + 'px';
+      el.style.fontSize = Math.max(10, cellSize-18) + 'px';
+      el.dataset.r = r; el.dataset.c = c;
+      grid[r][c].el = el;
+      boardEl.appendChild(el);
+    }
+}
+
+function updateCell(r, c) {
+  const cell=grid[r][c], el=cell.el;
+  el.className = 'cell'; el.textContent = '';
+  if (!cell.revealed) {
+    if      (cell.flagged)  el.classList.add('flagged');
+    else if (cell.question) el.classList.add('question');
+    else                    el.classList.add('hidden');
+    return;
+  }
+  el.classList.add('revealed');
+  if (cell.mine) { el.textContent = '💣'; }
+  else if (cell.adjMines > 0) { el.textContent = cell.adjMines; el.classList.add('n'+cell.adjMines); }
+}
+
+// ── Game logic ────────────────────────────────────────────────────────────────
+function reveal(r, c) {
+  const stack = [[r,c]];
+  while (stack.length) {
+    const [cr,cc] = stack.pop();
+    const cell = grid[cr][cc];
+    if (cell.revealed || cell.flagged) continue;
+    cell.revealed = true; cell.question = false; revealedCount++;
+    updateCell(cr,cc);
+    if (!cell.mine && cell.adjMines===0)
+      neighbours(cr,cc).forEach(([nr,nc])=>{
+        if (!grid[nr][nc].revealed && !grid[nr][nc].flagged) stack.push([nr,nc]);
+      });
+  }
+}
+
+function chord(r, c) {
+  const cell=grid[r][c];
+  if (!cell.revealed || cell.adjMines===0) return;
+  const nbrs = neighbours(r,c);
+  if (nbrs.filter(([nr,nc])=>grid[nr][nc].flagged).length !== cell.adjMines) return;
+  for (const [nr,nc] of nbrs) {
+    if (!grid[nr][nc].revealed && !grid[nr][nc].flagged) {
+      if (grid[nr][nc].mine) { showLifelineModal(nr,nc); return; }
+      reveal(nr,nc);
+    }
+  }
+  checkWin();
+}
+
+function checkWin() {
+  if (revealedCount >= cfg.rows*cfg.cols - cfg.mines) triggerWin();
+}
+
+function triggerWin() {
+  gameState='won'; stopTimer();
+  resetBtn.textContent='😎';
+  messageEl.textContent=`🎉 You won in ${timerVal}s!`;
+  messageEl.className='win';
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++)
+      if (grid[r][c].mine && !grid[r][c].flagged) { grid[r][c].flagged=true; updateCell(r,c); }
+  flagCount=cfg.mines; updateMineCount();
+  renderCredits();
+  saveBest(); showBest();
+}
+
+function triggerLoss(hr, hc) {
+  gameState='lost'; stopTimer();
+  resetBtn.textContent='😵';
+  messageEl.textContent='💥 Game over! No credits left.';
+  messageEl.className='lose';
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++) {
+      const cell=grid[r][c];
+      if (r===hr && c===hc) {
+        cell.revealed=true; cell.el.className='cell mine-hit'; cell.el.textContent='💣';
+      } else if (cell.mine && !cell.flagged) {
+        cell.revealed=true; cell.el.className='cell mine-revealed'; cell.el.textContent='💣';
+      } else if (!cell.mine && cell.flagged) {
+        cell.el.className='cell wrong-flag'; cell.el.textContent='';
+      }
+    }
+  renderCredits();
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+function startTimer() {
+  timerVal=0; timerEl.textContent=pad3(0);
+  timerHandle=setInterval(()=>{ timerVal=Math.min(timerVal+1,999); timerEl.textContent=pad3(timerVal); },1000);
+}
+function stopTimer() { clearInterval(timerHandle); timerHandle=null; }
+function updateMineCount() { mineCountEl.textContent=pad3(cfg.mines-flagCount); }
+
+function saveBest() {
+  const key=`ms_${level}`; const prev=parseInt(localStorage.getItem(key)||'9999');
+  if (timerVal<prev) localStorage.setItem(key,timerVal);
+}
+function showBest() {
+  const v=localStorage.getItem(`ms_${level}`);
+  bestEl.textContent = v ? `Best (${level}): ${v}s` : '';
+}
+// ── Lifeline Modal ────────────────────────────────────────────────────────────
+function showLifelineModal(r, c) {
+  pendingMineR = r; pendingMineC = c;
+  gameState = 'paused';
+  stopTimer();
+  resetBtn.textContent = '😱';
+
+  const canSkip = credits >= COST_SKIP;
+  const canSafe = credits >= COST_SAFE;
+
+  if (!canSkip && !canSafe) {
+    // No credits at all — go straight to loss
+    triggerLoss(r, c); return;
+  }
+
+  modalMsg.textContent = `You have ${credits} credit${credits!==1?'s':''} remaining. Use a lifeline to survive?`;
+  btnUseSkip.disabled = !canSkip;
+  btnUseSafe.disabled = !canSafe;
+  modalOverlay.classList.add('show');
+}
+
+function hideModal() { modalOverlay.classList.remove('show'); }
+
+// Lifeline 1: Skip Mine (2 credits)
+// Removes the mine from the hit cell, relocates it elsewhere, reveals the cell safely
+btnUseSkip.addEventListener('click', () => {
+  hideModal();
+  spendCredits(COST_SKIP);
+
+  const r=pendingMineR, c=pendingMineC;
+  const cell = grid[r][c];
+
+  // Remove mine from hit cell
+  cell.mine = false;
+  mineSet.delete(r*cfg.cols+c);
+
+  // Find a random unrevealed, unflagged, non-mine cell to relocate the mine
+  const candidates = [];
+  for (let rr=0;rr<cfg.rows;rr++)
+    for (let cc=0;cc<cfg.cols;cc++) {
+      const t=grid[rr][cc];
+      if (!t.mine && !t.revealed && !t.flagged && !(rr===r && cc===c))
+        candidates.push([rr,cc]);
+    }
+
+  if (candidates.length > 0) {
+    const [nr,nc] = candidates[Math.floor(Math.random()*candidates.length)];
+    grid[nr][nc].mine = true;
+    mineSet.add(nr*cfg.cols+nc);
+  }
+  // else: mine just disappears (extremely rare edge case)
+
+  recomputeAdjacency();
+  reveal(r, c);
+
+  // Flash the saved cell
+  setTimeout(()=>{ cell.el.classList.add('skip-flash'); setTimeout(()=>cell.el.classList.remove('skip-flash'),600); },50);
+
+  gameState='playing';
+  startTimer();
+  resetBtn.textContent='🙂';
+  messageEl.textContent='💨 Mine skipped! Keep going...';
+  messageEl.className='win';
+  checkWin();
+  renderCredits();
+});
+
+// Lifeline 2: Reveal Safe (1 credit)
+// Does NOT remove the mine — instead reveals the nearest guaranteed-safe unrevealed cell
+btnUseSafe.addEventListener('click', () => {
+  hideModal();
+  spendCredits(COST_SAFE);
+
+  const r=pendingMineR, c=pendingMineC;
+
+  // Find the closest unrevealed, unflagged, non-mine cell (BFS from hit cell)
+  const visited = new Set();
+  const queue = [[r,c]];
+  let safeCell = null;
+  outer: while (queue.length) {
+    const [cr,cc] = queue.shift();
+    for (const [nr,nc] of neighbours(cr,cc)) {
+      const key = nr*cfg.cols+nc;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const t=grid[nr][nc];
+      if (!t.revealed && !t.flagged && !t.mine) { safeCell=[nr,nc]; break outer; }
+      queue.push([nr,nc]);
+    }
+  }
+
+  if (safeCell) {
+    const [sr,sc] = safeCell;
+    reveal(sr, sc);
+    // Pulse highlight the revealed area
+    setTimeout(()=>{
+      grid[sr][sc].el.classList.add('safe-hint');
+      setTimeout(()=>grid[sr][sc].el.classList.remove('safe-hint'),1000);
+    },50);
+  }
+
+  // Resume game — mine is still there, player must avoid it
+  gameState='playing';
+  startTimer();
+  resetBtn.textContent='🙂';
+  messageEl.textContent='🔍 Safe cell revealed! Watch your step...';
+  messageEl.className='win';
+  checkWin();
+  renderCredits();
+});
+
+// Accept loss
+btnLose.addEventListener('click', () => {
+  hideModal();
+  triggerLoss(pendingMineR, pendingMineC);
+});
+
+// ── Active lifeline buttons (use during play, not just on mine hit) ───────────
+btnSkipActive.addEventListener('click', () => {
+  if (gameState !== 'playing' || credits < COST_SKIP) return;
+  // Find a random mine that is not yet revealed/flagged and relocate it
+  const mines = [];
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++)
+      if (grid[r][c].mine && !grid[r][c].revealed && !grid[r][c].flagged) mines.push([r,c]);
+  if (mines.length === 0) return;
+
+  spendCredits(COST_SKIP);
+  const [mr,mc] = mines[Math.floor(Math.random()*mines.length)];
+  grid[mr][mc].mine = false; mineSet.delete(mr*cfg.cols+mc);
+
+  const candidates = [];
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++) {
+      const t=grid[r][c];
+      if (!t.mine && !t.revealed && !t.flagged) candidates.push([r,c]);
+    }
+  if (candidates.length > 0) {
+    const [nr,nc] = candidates[Math.floor(Math.random()*candidates.length)];
+    grid[nr][nc].mine = true; mineSet.add(nr*cfg.cols+nc);
+  }
+  recomputeAdjacency();
+  messageEl.textContent = '💨 A random mine was relocated!';
+  messageEl.className = 'win';
+  renderCredits();
+});
+
+btnSafeActive.addEventListener('click', () => {
+  if (gameState !== 'playing' || credits < COST_SAFE) return;
+  // Reveal a random unrevealed safe cell
+  const safeCells = [];
+  for (let r=0;r<cfg.rows;r++)
+    for (let c=0;c<cfg.cols;c++) {
+      const t=grid[r][c];
+      if (!t.mine && !t.revealed && !t.flagged) safeCells.push([r,c]);
+    }
+  if (safeCells.length === 0) return;
+
+  spendCredits(COST_SAFE);
+  const [sr,sc] = safeCells[Math.floor(Math.random()*safeCells.length)];
+  reveal(sr, sc);
+  setTimeout(()=>{
+    grid[sr][sc].el.classList.add('safe-hint');
+    setTimeout(()=>grid[sr][sc].el.classList.remove('safe-hint'),1000);
+  },50);
+  messageEl.textContent = '🔍 Safe cell revealed!';
+  messageEl.className = 'win';
+  checkWin();
+  renderCredits();
+});
+// ── New game ──────────────────────────────────────────────────────────────────
+function newGame() {
+  stopTimer();
+  gameState='idle'; firstClick=true; flagCount=0; revealedCount=0; timerVal=0;
+  pendingMineR=-1; pendingMineC=-1;
+  timerEl.textContent=pad3(0);
+  resetBtn.textContent='🙂';
+  messageEl.textContent=''; messageEl.className='';
+  updateMineCount();
+  buildGrid(); renderBoard();
+  showBest();
+  flagMode=false; updateFlagToggle();
+  renderCredits();
+}
+
+// ── Flag toggle ───────────────────────────────────────────────────────────────
+function updateFlagToggle() {
+  flagToggle.innerHTML = `<span>🚩</span> Flag mode: ${flagMode?'ON':'OFF'}`;
+  flagToggle.classList.toggle('active', flagMode);
+}
+flagToggle.addEventListener('click', ()=>{ flagMode=!flagMode; updateFlagToggle(); });
+
+// ── Touch ─────────────────────────────────────────────────────────────────────
+let longPressTimer=null, touchMoved=false, lastTap=0;
+
+boardEl.addEventListener('touchstart', e=>{
+  touchMoved=false;
+  const t=e.touches[0];
+  const el=document.elementFromPoint(t.clientX,t.clientY)?.closest('.cell');
+  if (!el) return;
+  longPressTimer=setTimeout(()=>{ if(!touchMoved) handleFlag(+el.dataset.r,+el.dataset.c); },500);
+},{passive:true});
+
+boardEl.addEventListener('touchmove', ()=>{ touchMoved=true; clearTimeout(longPressTimer); },{passive:true});
+
+boardEl.addEventListener('touchend', e=>{
+  clearTimeout(longPressTimer);
+  if (touchMoved) return;
+  if (gameState==='won'||gameState==='lost'||gameState==='paused') return;
+  const t=e.changedTouches[0];
+  const el=document.elementFromPoint(t.clientX,t.clientY)?.closest('.cell');
+  if (!el) return;
+  e.preventDefault();
+  const r=+el.dataset.r, c=+el.dataset.c;
+  const now=Date.now(); const doubleTap=now-lastTap<300; lastTap=now;
+  if (doubleTap && grid[r][c].revealed) { chord(r,c); return; }
+  if (flagMode) { handleFlag(r,c); return; }
+  handleReveal(r,c);
+},{passive:false});
+
+// ── Mouse ─────────────────────────────────────────────────────────────────────
+boardEl.addEventListener('contextmenu', e=>e.preventDefault());
+boardEl.addEventListener('mousedown', e=>{
+  if (gameState==='won'||gameState==='lost'||gameState==='paused') return;
+  const el=e.target.closest('.cell'); if (!el) return;
+  const r=+el.dataset.r, c=+el.dataset.c;
+  if (e.button===2) { handleFlag(r,c); return; }
+  if (e.button===1) { e.preventDefault(); chord(r,c); return; }
+  if (e.button===0) { if (grid[r][c].revealed) { chord(r,c); return; } handleReveal(r,c); }
+});
+boardEl.addEventListener('dblclick', e=>{
+  const el=e.target.closest('.cell'); if (!el) return;
+  const r=+el.dataset.r, c=+el.dataset.c;
+  if (grid[r][c].revealed) chord(r,c);
+});
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+function handleReveal(r, c) {
+  const cell=grid[r][c];
+  if (cell.flagged||cell.question) return;
+  if (firstClick) {
+    firstClick=false; placeMines(r,c); gameState='playing';
+    startTimer(); resetBtn.textContent='😮';
+  }
+  if (cell.mine) { showLifelineModal(r,c); return; }
+  reveal(r,c); checkWin();
+  if (gameState==='playing') resetBtn.textContent='🙂';
+}
+
+function handleFlag(r, c) {
+  if (gameState==='won'||gameState==='lost'||gameState==='paused') return;
+  const cell=grid[r][c]; if (cell.revealed) return;
+  if (!cell.flagged&&!cell.question)   { cell.flagged=true;  flagCount++; }
+  else if (cell.flagged)                { cell.flagged=false; cell.question=true; flagCount--; }
+  else                                  { cell.question=false; }
+  updateCell(r,c); updateMineCount();
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  if (e.key==='r'||e.key==='R') newGame();
+  if (e.key==='f'||e.key==='F') { flagMode=!flagMode; updateFlagToggle(); }
+  if (e.key==='Escape') { if (modalOverlay.classList.contains('show')) { hideModal(); triggerLoss(pendingMineR,pendingMineC); } }
+});
+
+// ── Difficulty ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.diff-row button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.diff-row button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); level=btn.dataset.level; cfg=LEVELS[level]; newGame();
+  });
+});
+
+resetBtn.addEventListener('click', newGame);
+
+// ── Service Worker ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadCredits();
+updateFlagToggle();
+newGame();
+</script>
+</body>
+</html>

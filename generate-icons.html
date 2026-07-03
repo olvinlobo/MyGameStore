@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate GameCorner Icons</title>
+<style>body{font-family:sans-serif;padding:20px;background:#1e1e2e;color:#cdd6f4;}p{margin-bottom:16px;}</style>
+</head>
+<body>
+<p>Right-click each image → "Save Image As" → save as the filename shown below it into the <strong>GameCorner/</strong> folder.</p>
+<script>
+function makeIcon(size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Dark background with rounded corners
+  ctx.fillStyle = '#1e1e2e';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, size * 0.18);
+  ctx.fill();
+
+  // Gradient overlay
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, 'rgba(137,180,250,0.15)');
+  grad.addColorStop(1, 'rgba(203,166,247,0.15)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, size * 0.18);
+  ctx.fill();
+
+  // Emoji
+  ctx.font = `${size * 0.52}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🎮', size / 2, size / 2 + size * 0.03);
+
+  return canvas;
+}
+
+[192, 512].forEach(size => {
+  const canvas = makeIcon(size);
+  const img = document.createElement('img');
+  img.src = canvas.toDataURL('image/png');
+  img.style.cssText = 'display:block;margin:16px;width:96px;height:96px;border:1px solid #44475a;border-radius:12px;';
+  const label = document.createElement('p');
+  label.textContent = `Save as: icon-${size}.png`;
+  label.style.fontFamily = 'monospace';
+  document.body.appendChild(img);
+  document.body.appendChild(label);
+});
+</script>
+</body>
+</html>

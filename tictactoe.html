@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"/>
+  <title>Tic-Tac-Toe — GameCorner</title>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#1e1e2e"/>
+  <style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    :root {
+      --bg:#1e1e2e; --surface:#2a2a3e; --border:#44475a;
+      --text:#cdd6f4; --sub:#6c7086; --accent:#89b4fa;
+      --green:#a6e3a1; --red:#f38ba8; --yellow:#f9e2af; --purple:#cba6f7;
+      --orange:#fab387;
+    }
+    html, body {
+      height:100%; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      -webkit-tap-highlight-color:transparent;
+      padding-top:env(safe-area-inset-top);
+      padding-bottom:env(safe-area-inset-bottom);
+    }
+    #app {
+      display:flex; flex-direction:column; align-items:center;
+      min-height:100%; padding:8px 16px 16px;
+      gap:10px; position:relative;
+    }
+    .back-btn {
+      position:absolute; left:12px; top:8px; font-size:22px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; width:40px; height:40px;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; text-decoration:none;
+    }
+    .back-btn:hover { border-color:var(--accent); }
+    h1 { font-size:22px; font-weight:700; letter-spacing:2px;
+         text-transform:uppercase; color:var(--accent); padding-top:2px; }
+
+    /* Mode selector */
+    .mode-row { display:flex; gap:8px; }
+    .mode-row button {
+      background:var(--surface); border:1px solid var(--border);
+      color:var(--text); border-radius:20px; padding:5px 14px;
+      font-size:12px; font-weight:600; cursor:pointer;
+    }
+    .mode-row button.active { background:var(--accent); border-color:var(--accent); color:#1e1e2e; }
+
+    /* Scoreboard */
+    .scoreboard {
+      display:flex; gap:12px; align-items:center;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; padding:8px 18px;
+    }
+    .score-item { text-align:center; min-width:52px; }
+    .score-label { font-size:10px; color:var(--sub); text-transform:uppercase; letter-spacing:1px; }
+    .score-value { font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; }
+    .score-x { color:var(--accent); }
+    .score-draw { color:var(--yellow); }
+    .score-o { color:var(--red); }
+    .score-sep { color:var(--border); font-size:20px; }
+
+    /* Status */
+    #status {
+      font-size:15px; font-weight:700; min-height:22px; text-align:center;
+    }
+    #status.x-turn  { color:var(--accent); }
+    #status.o-turn  { color:var(--red); }
+    #status.win-x   { color:var(--green); }
+    #status.win-o   { color:var(--red); }
+    #status.draw    { color:var(--yellow); }
+
+    /* Board */
+    #board {
+      display:grid; grid-template-columns:repeat(3,1fr);
+      gap:10px; width:min(320px, 90vw);
+    }
+    .cell {
+      aspect-ratio:1; background:var(--surface);
+      border:2px solid var(--border); border-radius:16px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:clamp(36px,14vw,64px); font-weight:900;
+      cursor:pointer; transition:all 0.15s; user-select:none;
+    }
+    .cell:hover:not(.taken) { border-color:var(--accent); background:#32324a; }
+    .cell.taken { cursor:default; }
+    .cell.x { color:var(--accent); }
+    .cell.o { color:var(--red); }
+    .cell.winning { border-color:var(--green); background:#1e3a2a;
+                    animation:pop 0.3s ease-out; }
+    .cell.hint-highlight { border-color:var(--yellow); background:#3a3218;
+                           animation:pop 0.3s ease-out; }
+    @keyframes pop {
+      0%   { transform:scale(0.85); }
+      60%  { transform:scale(1.08); }
+      100% { transform:scale(1); }
+    }
+
+    /* Credits */
+    .credits-bar {
+      display:flex; align-items:center; gap:10px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; padding:7px 16px; width:100%; max-width:360px;
+      justify-content:space-between;
+    }
+    .credits-label { font-size:11px; color:var(--sub); text-transform:uppercase; letter-spacing:1px; }
+    .credits-pips  { display:flex; gap:5px; }
+    .pip { width:18px; height:18px; border-radius:50%; background:var(--purple); border:2px solid var(--purple); }
+    .pip.empty { background:transparent; border-color:var(--border); }
+    .credits-count { font-size:14px; font-weight:700; color:var(--purple); min-width:60px; text-align:right; }
+
+    /* Lifelines */
+    .lifeline-row { display:flex; gap:8px; }
+    .lifeline-btn {
+      display:flex; align-items:center; gap:5px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:6px 14px;
+      font-size:12px; font-weight:600; color:var(--text); cursor:pointer;
+      transition:background 0.15s, border-color 0.15s;
+    }
+    .lifeline-btn:disabled { opacity:0.35; cursor:not-allowed; }
+    .lifeline-btn.hint  { border-color:var(--yellow); }
+    .lifeline-btn.hint:not(:disabled):hover  { background:var(--yellow); color:#1e1e2e; }
+    .lifeline-btn.undo  { border-color:var(--orange); }
+    .lifeline-btn.undo:not(:disabled):hover  { background:var(--orange); color:#1e1e2e; }
+    .lifeline-btn .cost { font-size:10px; opacity:0.7; }
+
+    #new-game-btn {
+      background:var(--accent); border:none; border-radius:20px;
+      padding:10px 32px; font-size:15px; font-weight:700;
+      color:#1e1e2e; cursor:pointer; transition:opacity 0.15s;
+    }
+    #new-game-btn:hover { opacity:0.85; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <a href="index.html" class="back-btn" title="Back to GameCorner">🏠</a>
+  <h1>❌⭕ Tic-Tac-Toe</h1>
+
+  <div class="mode-row">
+    <button data-mode="pvp">👥 2 Players</button>
+    <button data-mode="easy">🤖 Easy AI</button>
+    <button data-mode="hard" class="active">🧠 Hard AI</button>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score-item">
+      <div class="score-label">You (X)</div>
+      <div class="score-value score-x" id="score-x">0</div>
+    </div>
+    <div class="score-sep">|</div>
+    <div class="score-item">
+      <div class="score-label">Draws</div>
+      <div class="score-value score-draw" id="score-draw">0</div>
+    </div>
+    <div class="score-sep">|</div>
+    <div class="score-item">
+      <div class="score-label" id="o-label">AI (O)</div>
+      <div class="score-value score-o" id="score-o">0</div>
+    </div>
+  </div>
+
+  <div id="status" class="x-turn">Your turn (X)</div>
+
+  <div id="board"></div>
+
+  <!-- Credits display -->
+  <div class="credits-bar">
+    <div>
+      <div class="credits-label">⚡ Credits</div>
+      <div class="credits-pips" id="pips"></div>
+    </div>
+    <div class="credits-count" id="credits-count"></div>
+  </div>
+
+  <!-- Lifelines -->
+  <div class="lifeline-row">
+    <button class="lifeline-btn hint" id="btn-hint">
+      💡 Hint <span class="cost">(1cr)</span>
+    </button>
+    <button class="lifeline-btn undo" id="btn-undo">
+      ↩️ Undo Move <span class="cost">(2cr)</span>
+    </button>
+  </div>
+
+  <button id="new-game-btn">New Game</button>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const MAX_CREDITS = 5;
+const COST_HINT   = 1;
+const COST_UNDO   = 2;
+const WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let board, currentPlayer, gameOver, mode, scores, history;
+let credits = MAX_CREDITS;
+let hintCell = -1;
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const boardEl     = document.getElementById('board');
+const statusEl    = document.getElementById('status');
+const pipsEl      = document.getElementById('pips');
+const creditsEl   = document.getElementById('credits-count');
+const btnHint     = document.getElementById('btn-hint');
+const btnUndo     = document.getElementById('btn-undo');
+const scoreX      = document.getElementById('score-x');
+const scoreO      = document.getElementById('score-o');
+const scoreDraw   = document.getElementById('score-draw');
+const oLabel      = document.getElementById('o-label');
+
+// ── Credits ───────────────────────────────────────────────────────────────────
+function loadCredits() {
+  const s = parseInt(localStorage.getItem('ms_credits'));
+  credits = isNaN(s) ? MAX_CREDITS : Math.min(s, MAX_CREDITS);
+}
+function saveCredits() { localStorage.setItem('ms_credits', credits); }
+function spendCredits(n) { credits = Math.max(0, credits - n); saveCredits(); renderCredits(); }
+function renderCredits() {
+  pipsEl.innerHTML = '';
+  for (let i=0;i<MAX_CREDITS;i++) {
+    const p = document.createElement('div');
+    p.className = 'pip' + (i < credits ? '' : ' empty');
+    pipsEl.appendChild(p);
+  }
+  creditsEl.textContent = `${credits} / ${MAX_CREDITS}`;
+  btnHint.disabled = credits < COST_HINT || gameOver;
+  btnUndo.disabled = credits < COST_UNDO || gameOver || history.length < (mode==='pvp' ? 1 : 2);
+}
+
+// ── Board render ──────────────────────────────────────────────────────────────
+function renderBoard() {
+  boardEl.innerHTML = '';
+  board.forEach((val, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (val ? ' taken' : '');
+    if (val === 'X') { cell.classList.add('x'); cell.textContent = '✕'; }
+    if (val === 'O') { cell.classList.add('o'); cell.textContent = '○'; }
+    if (!val && !gameOver) cell.addEventListener('click', () => handleClick(i));
+    cell.dataset.i = i;
+    boardEl.appendChild(cell);
+  });
+}
+
+function highlightWin(combo) {
+  combo.forEach(i => boardEl.children[i].classList.add('winning'));
+}
+function highlightHint(i) {
+  clearHint();
+  hintCell = i;
+  if (i >= 0) boardEl.children[i].classList.add('hint-highlight');
+}
+function clearHint() {
+  if (hintCell >= 0) {
+    boardEl.children[hintCell]?.classList.remove('hint-highlight');
+    hintCell = -1;
+  }
+}
+
+// ── Game logic ────────────────────────────────────────────────────────────────
+function checkWinner(b) {
+  for (const [a,c,d] of WINS)
+    if (b[a] && b[a]===b[c] && b[a]===b[d]) return { winner:b[a], combo:[a,c,d] };
+  if (b.every(v=>v)) return { winner:'draw' };
+  return null;
+}
+
+function handleClick(i) {
+  if (gameOver || board[i] || currentPlayer!=='X') return;
+  clearHint();
+  history.push([...board]);
+  board[i] = 'X';
+  renderBoard();
+  const result = checkWinner(board);
+  if (result) { endGame(result); return; }
+  currentPlayer = 'O';
+  updateStatus();
+  renderCredits();
+  if (mode !== 'pvp') setTimeout(aiMove, 350);
+}
+
+function handleClickPVP(i) {
+  if (gameOver || board[i]) return;
+  clearHint();
+  history.push([...board]);
+  board[i] = currentPlayer;
+  renderBoard();
+  const result = checkWinner(board);
+  if (result) { endGame(result); return; }
+  currentPlayer = currentPlayer==='X' ? 'O' : 'X';
+  updateStatus();
+  renderCredits();
+}
+
+function aiMove() {
+  if (gameOver) return;
+  const move = mode==='easy' ? aiEasy() : aiBest(board, 'O').index;
+  if (move === undefined || move === null) return;
+  history.push([...board]);
+  board[move] = 'O';
+  renderBoard();
+  const result = checkWinner(board);
+  if (result) { endGame(result); return; }
+  currentPlayer = 'X';
+  updateStatus();
+  renderCredits();
+}
+
+// Easy AI: random empty cell
+function aiEasy() {
+  const empty = board.map((v,i)=>v?null:i).filter(i=>i!==null);
+  return empty[Math.floor(Math.random()*empty.length)];
+}
+
+// Hard AI: minimax
+function aiBest(b, player) {
+  const result = checkWinner(b);
+  if (result) {
+    if (result.winner==='O') return { score:10 };
+    if (result.winner==='X') return { score:-10 };
+    return { score:0 };
+  }
+  const moves = [];
+  for (let i=0;i<9;i++) {
+    if (b[i]) continue;
+    const nb = [...b]; nb[i] = player;
+    const s = aiBest(nb, player==='O'?'X':'O').score;
+    moves.push({index:i, score:s});
+  }
+  if (!moves.length) return {score:0};
+  return moves.reduce((best,m) =>
+    player==='O' ? (m.score > best.score ? m : best)
+                 : (m.score < best.score ? m : best)
+  );
+}
+
+// Best move for X (used by hint)
+function bestMoveForX() { return aiBest(board, 'X').index; }
+
+function endGame(result) {
+  gameOver = true;
+  if (result.winner === 'draw') {
+    scores.draw++;
+    scoreDraw.textContent = scores.draw;
+    statusEl.textContent = "🤝 It's a draw!";
+    statusEl.className = 'draw';
+  } else if (result.winner === 'X') {
+    scores.x++;
+    scoreX.textContent = scores.x;
+    statusEl.textContent = '🎉 You win!';
+    statusEl.className = 'win-x';
+    highlightWin(result.combo);
+  } else {
+    scores.o++;
+    scoreO.textContent = scores.o;
+    statusEl.textContent = mode==='pvp' ? '⭕ O wins!' : '🤖 AI wins!';
+    statusEl.className = 'win-o';
+    highlightWin(result.combo);
+  }
+  renderCredits();
+}
+
+function updateStatus() {
+  if (gameOver) return;
+  if (mode === 'pvp') {
+    statusEl.textContent = currentPlayer==='X' ? '✕ X\'s turn' : '○ O\'s turn';
+    statusEl.className = currentPlayer==='X' ? 'x-turn' : 'o-turn';
+  } else {
+    statusEl.textContent = currentPlayer==='X' ? 'Your turn (X)' : '🤖 AI thinking...';
+    statusEl.className = currentPlayer==='X' ? 'x-turn' : 'o-turn';
+  }
+}
+
+// ── Lifelines ─────────────────────────────────────────────────────────────────
+btnHint.addEventListener('click', () => {
+  if (credits < COST_HINT || gameOver || currentPlayer !== 'X') return;
+  spendCredits(COST_HINT);
+  const move = bestMoveForX();
+  if (move !== undefined && move !== null) {
+    highlightHint(move);
+    statusEl.textContent = `💡 Best move: cell ${move+1}`;
+    statusEl.className = 'x-turn';
+  }
+});
+
+btnUndo.addEventListener('click', () => {
+  if (credits < COST_UNDO || gameOver) return;
+  const stepsBack = mode==='pvp' ? 1 : 2; // undo AI move + player move in vs AI
+  if (history.length < stepsBack) return;
+  spendCredits(COST_UNDO);
+  for (let i=0;i<stepsBack;i++) board = history.pop();
+  gameOver = false;
+  currentPlayer = 'X';
+  clearHint();
+  renderBoard();
+  updateStatus();
+  renderCredits();
+});
+
+// ── Mode selector ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.mode-row button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-row button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    oLabel.textContent = mode==='pvp' ? 'Player O' : 'AI (O)';
+    newGame();
+  });
+});
+
+// ── New game ──────────────────────────────────────────────────────────────────
+function newGame() {
+  board = Array(9).fill(null);
+  currentPlayer = 'X';
+  gameOver = false;
+  history = [];
+  hintCell = -1;
+  clearHint();
+  renderBoard();
+  updateStatus();
+  renderCredits();
+}
+
+document.getElementById('new-game-btn').addEventListener('click', newGame);
+
+// Intercept clicks for PVP mode
+boardEl.addEventListener('click', e => {
+  if (mode !== 'pvp') return;
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  handleClickPVP(+cell.dataset.i);
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+mode = 'hard';
+scores = { x:0, o:0, draw:0 };
+loadCredits();
+newGame();
+</script>
+</body>
+</html>
