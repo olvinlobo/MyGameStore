@@ -1,9 +1,10 @@
-const CACHE = 'gamecorner-v1';
+const CACHE = 'gamecorner-v2';
 const ASSETS = [
   './',
   './index.html',
   './minesweeper.html',
   './tictactoe.html',
+  './poker.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
